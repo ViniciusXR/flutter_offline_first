@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/task.dart';
+import '../models/sync_queue.dart';
 
 class DatabaseService {
   static final DatabaseService instance = DatabaseService._init();
@@ -21,7 +22,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 6,  // ATUALIZADO: múltiplas fotos
+      version: 7,  // ATUALIZADO: sync_queue para offline-first
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -45,7 +46,22 @@ class DatabaseService {
         completedBy TEXT,
         latitude REAL,
         longitude REAL,
-        locationName TEXT
+        locationName TEXT,
+        lastModified $textType,
+        syncStatus $intType DEFAULT 0
+      )
+    ''');
+
+    // Tabela de fila de sincronização
+    await db.execute('''
+      CREATE TABLE sync_queue (
+        id $idType,
+        taskId INTEGER,
+        operation $textType,
+        data TEXT,
+        createdAt $textType,
+        retryCount $intType DEFAULT 0,
+        error TEXT
       )
     ''');
   }
@@ -107,6 +123,33 @@ class DatabaseService {
       ''');
       
       print('✅ Migração v6 - suporte a múltiplas fotos adicionado');
+    }
+    if (oldVersion < 7) {
+      // Adicionar campos para offline-first
+      await db.execute('ALTER TABLE tasks ADD COLUMN lastModified TEXT');
+      await db.execute('ALTER TABLE tasks ADD COLUMN syncStatus INTEGER DEFAULT 0');
+      
+      // Definir lastModified para tasks existentes
+      await db.execute('''
+        UPDATE tasks 
+        SET lastModified = createdAt
+        WHERE lastModified IS NULL
+      ''');
+      
+      // Criar tabela sync_queue
+      await db.execute('''
+        CREATE TABLE sync_queue (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          taskId INTEGER,
+          operation TEXT NOT NULL,
+          data TEXT,
+          createdAt TEXT NOT NULL,
+          retryCount INTEGER NOT NULL DEFAULT 0,
+          error TEXT
+        )
+      ''');
+      
+      print('✅ Migração v7 - offline-first com sync_queue adicionado');
     }
     print('✅ Banco migrado de v$oldVersion para v$newVersion');
   }
@@ -181,5 +224,44 @@ class DatabaseService {
   Future close() async {
     final db = await instance.database;
     db.close();
+  }
+
+  // ==================== SYNC QUEUE METHODS ====================
+  
+  Future<SyncQueue> createSyncQueue(SyncQueue syncQueue) async {
+    final db = await instance.database;
+    final id = await db.insert('sync_queue', syncQueue.toMap());
+    return syncQueue.copyWith(id: id);
+  }
+
+  Future<List<SyncQueue>> readAllSyncQueue() async {
+    final db = await instance.database;
+    const orderBy = 'createdAt ASC';
+    final result = await db.query('sync_queue', orderBy: orderBy);
+    return result.map((json) => SyncQueue.fromMap(json)).toList();
+  }
+
+  Future<int> updateSyncQueue(SyncQueue syncQueue) async {
+    final db = await instance.database;
+    return db.update(
+      'sync_queue',
+      syncQueue.toMap(),
+      where: 'id = ?',
+      whereArgs: [syncQueue.id],
+    );
+  }
+
+  Future<int> deleteSyncQueue(int id) async {
+    final db = await instance.database;
+    return await db.delete(
+      'sync_queue',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> clearSyncQueue() async {
+    final db = await instance.database;
+    return await db.delete('sync_queue');
   }
 }

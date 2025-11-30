@@ -4,6 +4,7 @@ import '../models/task.dart';
 import '../services/database_service.dart';
 import '../services/camera_service.dart';
 import '../services/location_service.dart';
+import '../services/sync_service.dart';
 import '../widgets/location_picker.dart';
 
 class TaskFormScreen extends StatefulWidget {
@@ -149,13 +150,20 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           latitude: _latitude,
           longitude: _longitude,
           locationName: _locationName,
+          syncStatus: 1,  // Marcar como pendente até sincronizar
         );
-        await DatabaseService.instance.create(newTask);
+        final created = await DatabaseService.instance.create(newTask);
+        
+        // Adicionar à fila de sincronização
+        await SyncService.instance.queueOperation(
+          operation: 'CREATE',
+          task: created,
+        );
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('✓ Tarefa criada'),
+              content: Text('✓ Tarefa criada e aguardando sincronização'),
               backgroundColor: Colors.green,
             ),
           );
@@ -171,13 +179,20 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           latitude: _latitude,
           longitude: _longitude,
           locationName: _locationName,
+          syncStatus: 1,  // Marcar como pendente
         );
         await DatabaseService.instance.update(updatedTask);
+        
+        // Adicionar à fila de sincronização
+        await SyncService.instance.queueOperation(
+          operation: 'UPDATE',
+          task: updatedTask,
+        );
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('✓ Tarefa atualizada'),
+              content: Text('✓ Tarefa atualizada e aguardando sincronização'),
               backgroundColor: Colors.blue,
             ),
           );

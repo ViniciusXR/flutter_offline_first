@@ -18,6 +18,10 @@ class Task {
   final double? longitude;
   final String? locationName;
 
+  // OFFLINE-FIRST
+  final DateTime lastModified;    // Para Last-Write-Wins
+  final int syncStatus;           // 0 = synced, 1 = pending
+
   Task({
     this.id,
     required this.title,
@@ -31,14 +35,19 @@ class Task {
     this.latitude,
     this.longitude,
     this.locationName,
+    DateTime? lastModified,
+    this.syncStatus = 0,  // Default: synced
   }) : createdAt = createdAt ?? DateTime.now(),
-       photoPaths = photoPaths ?? [];  // Lista vazia por padrão
+       photoPaths = photoPaths ?? [],  // Lista vazia por padrão
+       lastModified = lastModified ?? DateTime.now();
 
   // Getters auxiliares
   bool get hasPhotos => photoPaths.isNotEmpty;
   int get photosCount => photoPaths.length;
   bool get hasLocation => latitude != null && longitude != null;
   bool get wasCompletedByShake => completedBy == 'shake';
+  bool get isSynced => syncStatus == 0;
+  bool get isPending => syncStatus == 1;
 
   Map<String, dynamic> toMap() {
     return {
@@ -54,6 +63,8 @@ class Task {
       'latitude': latitude,
       'longitude': longitude,
       'locationName': locationName,
+      'lastModified': lastModified.toIso8601String(),
+      'syncStatus': syncStatus,
     };
   }
 
@@ -79,6 +90,10 @@ class Task {
       latitude: map['latitude'] as double?,
       longitude: map['longitude'] as double?,
       locationName: map['locationName'] as String?,
+      lastModified: map['lastModified'] != null
+          ? DateTime.parse(map['lastModified'] as String)
+          : DateTime.now(),
+      syncStatus: map['syncStatus'] as int? ?? 0,
     );
   }
 
@@ -95,6 +110,8 @@ class Task {
     double? latitude,
     double? longitude,
     String? locationName,
+    DateTime? lastModified,
+    int? syncStatus,
   }) {
     return Task(
       id: id ?? this.id,
@@ -109,6 +126,8 @@ class Task {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       locationName: locationName ?? this.locationName,
+      lastModified: lastModified ?? DateTime.now(),  // Sempre atualiza ao copiar
+      syncStatus: syncStatus ?? this.syncStatus,
     );
   }
 }

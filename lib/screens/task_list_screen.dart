@@ -4,8 +4,11 @@ import '../services/database_service.dart';
 import '../services/sensor_service.dart';
 import '../services/location_service.dart';
 import '../services/camera_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/sync_service.dart';
 import '../screens/task_form_screen.dart';
 import '../widgets/task_card.dart';
+import 'dart:async';
 
 class TaskListScreen extends StatefulWidget {
   const TaskListScreen({super.key});
@@ -18,17 +21,75 @@ class _TaskListScreenState extends State<TaskListScreen> {
   List<Task> _tasks = [];
   String _filter = 'all';
   bool _isLoading = true;
+  bool _isOnline = true;
+  StreamSubscription<bool>? _connectivitySubscription;
+  StreamSubscription<String>? _syncSubscription;
 
   @override
   void initState() {
     super.initState();
+    _initializeServices();
     _loadTasks();
     _setupShakeDetection(); // INICIAR SHAKE
+  }
+
+  Future<void> _initializeServices() async {
+    // Inicializar ConnectivityService
+    await ConnectivityService.instance.initialize();
+    _isOnline = ConnectivityService.instance.isOnline;
+    
+    // Inicializar SyncService
+    await SyncService.instance.initialize();
+    
+    // Ouvir mudanças de conectividade
+    _connectivitySubscription = ConnectivityService.instance.connectionStream.listen((isOnline) {
+      if (mounted) {
+        setState(() {
+          _isOnline = isOnline;
+        });
+        
+        if (isOnline) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🟢 ONLINE - Sincronizando...'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🔴 OFFLINE - Dados salvos localmente'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    });
+    
+    // Ouvir status de sincronização
+    _syncSubscription = SyncService.instance.syncStatusStream.listen((status) {
+      if (mounted && status == 'completed') {
+        _loadTasks(); // Recarregar após sincronização
+        
+        // Mostrar feedback de sincronização bem-sucedida
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Sincronização concluída com sucesso'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
     SensorService.instance.stop(); // PARAR SHAKE
+    _connectivitySubscription?.cancel();
+    _syncSubscription?.cancel();
     super.dispose();
   }
 
@@ -109,9 +170,17 @@ class _TaskListScreenState extends State<TaskListScreen> {
         completed: true,
         completedAt: DateTime.now(),
         completedBy: 'shake',
+        syncStatus: 1,  // Marcar como pendente
       );
 
       await DatabaseService.instance.update(updated);
+      
+      // Adicionar à fila de sincronização
+      await SyncService.instance.queueOperation(
+        operation: 'UPDATE',
+        task: updated,
+      );
+      
       Navigator.pop(context);
       await _loadTasks();
 
@@ -254,13 +323,20 @@ class _TaskListScreenState extends State<TaskListScreen> {
           }
         }
         
+        // Adicionar à fila de sincronização ANTES de deletar localmente
+        await SyncService.instance.queueOperation(
+          operation: 'DELETE',
+          task: task,
+        );
+        
+        // Deletar localmente
         await DatabaseService.instance.delete(task.id!);
         await _loadTasks();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('🗑️ Tarefa deletada'),
+              content: Text('🗑️ Tarefa deletada e aguardando sincronização'),
               duration: Duration(seconds: 2),
             ),
           );
@@ -284,9 +360,17 @@ class _TaskListScreenState extends State<TaskListScreen> {
         completed: !task.completed,
         completedAt: !task.completed ? DateTime.now() : null,
         completedBy: !task.completed ? 'manual' : null,
+        syncStatus: 1,  // Marcar como pendente
       );
 
       await DatabaseService.instance.update(updated);
+      
+      // Adicionar à fila de sincronização
+      await SyncService.instance.queueOperation(
+        operation: 'UPDATE',
+        task: updated,
+      );
+      
       await _loadTasks();
     } catch (e) {
       if (mounted) {
@@ -307,7 +391,39 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Minhas Tarefas'),
+        title: Row(
+          children: [
+            const Text('Minhas Tarefas'),
+            const SizedBox(width: 12),
+            // Indicador de conectividade
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _isOnline ? Colors.green : Colors.red,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _isOnline ? Icons.cloud_done : Icons.cloud_off,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _isOnline ? 'Online' : 'Offline',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [

@@ -50,6 +50,8 @@ dependencies:
   vibration: ^2.0.0              # Feedback tátil
   geolocator: ^10.1.0            # GPS
   geocoding: ^2.1.1              # Geocodificação
+  connectivity_plus: ^6.0.5      # Detector de conectividade
+  http: ^1.2.0                   # Cliente HTTP
 
 dev_dependencies:
   flutter_test:
