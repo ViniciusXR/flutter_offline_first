@@ -920,11 +920,6 @@ ifconfig
 flutter run
 ```
 
-<<<<<<< HEAD
-**Documentação completa:** Esta seção acima contém todas as informações necessárias para configurar e usar o backend.
-
-=======
->>>>>>> 26a1214a77bdbf2c743ae8246b9daf6f28f6628b
 ---
 
 ## 🔧 Detalhes Técnicos
