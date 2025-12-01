@@ -20,6 +20,7 @@ Aplicativo completo de gerenciamento de tarefas desenvolvido em Flutter com arqu
 - [📊 Estrutura do Projeto](#-estrutura-do-projeto)
 - [📱 Permissões Necessárias](#-permissões-necessárias)
 - [🎬 Como Demonstrar Offline-First](#-como-demonstrar-offline-first)
+- [🖥️ Backend](#️-backend)
 - [⚙️ Configuração de Modo](#️-configuração-de-modo)
 - [🔧 Detalhes Técnicos](#-detalhes-técnicos)
 - [🐛 Solução de Problemas](#-solução-de-problemas)
@@ -458,15 +459,7 @@ flutter run
 
 **IMPORTANTE:** O app vem configurado em **MODO TESTE** e funciona perfeitamente sem backend!
 
-Para conectar a um backend real:
-
-1. Configure um servidor seguindo `BACKEND_SETUP.md`
-2. Edite `lib/services/api_service.dart`:
-   ```dart
-   bool testMode = false;  // Mude de true para false
-   final String baseUrl = 'http://SEU_IP:3000/api/tasks';
-   ```
-3. Rebuild: `flutter run`
+Para conectar a um backend real, veja a seção [🖥️ Backend](#️-backend) abaixo.
 
 ---
 
@@ -614,6 +607,267 @@ I/flutter: 🧪 MODO TESTE ATIVO: Operações simuladas com sucesso
 
 ---
 
+## 🖥️ Backend
+
+### 🎯 Visão Geral
+
+O projeto inclui um backend simples em **Node.js/Express** para demonstrar a sincronização Offline-First. O backend armazena dados em memória e é ideal para testes e demonstrações.
+
+**Características:**
+- ✅ API RESTful completa (CRUD)
+- ✅ Armazenamento em memória (perfeito para testes)
+- ✅ Logs detalhados de todas as operações
+- ✅ Suporte a timestamps para LWW (Last-Write-Wins)
+- ✅ Health check endpoint
+- ✅ Fácil configuração (2 comandos)
+
+### 📦 Instalação
+
+No diretório raiz do projeto:
+
+```bash
+# Instalar dependências
+npm install
+
+# Iniciar servidor
+npm start
+```
+
+O servidor estará rodando em:
+- **http://localhost:3000** (local)
+- **http://10.0.2.2:3000** (Android Emulator)
+
+### 🔌 Endpoints da API
+
+| Método | Endpoint | Descrição | Body |
+|--------|----------|-----------|------|
+| GET | `/api/health` | Health check | - |
+| GET | `/api/tasks` | Listar todas as tarefas | - |
+| GET | `/api/tasks/:id` | Buscar tarefa por ID | - |
+| POST | `/api/tasks` | Criar nova tarefa | Task JSON |
+| PUT | `/api/tasks/:id` | Atualizar tarefa | Task JSON |
+| DELETE | `/api/tasks/:id` | Deletar tarefa | - |
+
+### 🧪 Testar com Postman/cURL
+
+#### Health Check
+```bash
+curl http://localhost:3000/api/health
+```
+
+**Resposta:**
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-11-30T14:00:00.000Z"
+}
+```
+
+#### Criar Tarefa
+```bash
+curl -X POST http://localhost:3000/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Minha Tarefa",
+    "description": "Descrição da tarefa",
+    "priority": "high",
+    "isCompleted": false,
+    "createdAt": "2025-11-30T14:00:00.000Z",
+    "lastModified": "2025-11-30T14:00:00.000Z"
+  }'
+```
+
+**Resposta:**
+```json
+{
+  "id": 1,
+  "title": "Minha Tarefa",
+  "description": "Descrição da tarefa",
+  "priority": "high",
+  "isCompleted": false,
+  "createdAt": "2025-11-30T14:00:00.000Z",
+  "lastModified": "2025-11-30T14:00:00.000Z"
+}
+```
+
+#### Listar Tarefas
+```bash
+curl http://localhost:3000/api/tasks
+```
+
+#### Atualizar Tarefa
+```bash
+curl -X PUT http://localhost:3000/api/tasks/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": 1,
+    "title": "Tarefa EDITADA",
+    "description": "Editada via API",
+    "priority": "urgent",
+    "isCompleted": false,
+    "lastModified": "2025-11-30T15:00:00.000Z"
+  }'
+```
+
+#### Deletar Tarefa
+```bash
+curl -X DELETE http://localhost:3000/api/tasks/1
+```
+
+### ⚙️ Configurar no App Flutter
+
+#### 1. Desabilitar Modo Teste
+
+Edite `lib/services/api_service.dart`:
+
+```dart
+// Linha 20
+bool testMode = false;  // Mude de true para false
+```
+
+#### 2. Configurar URL do Backend
+
+**Para Android Emulator:**
+```dart
+// Linha 15
+final String baseUrl = 'http://10.0.2.2:3000/api/tasks';
+```
+
+**Para Dispositivo Físico:**
+```dart
+// Use seu IP local (descubra com `ipconfig` no Windows ou `ifconfig` no Mac/Linux)
+final String baseUrl = 'http://192.168.1.100:3000/api/tasks';
+```
+
+**Importante:** Certifique-se de que o celular e o computador estão na **mesma rede WiFi**!
+
+#### 3. Rebuild do App
+
+```bash
+flutter run
+```
+
+### 🧪 Teste de Conflito (LWW)
+
+#### Cenário 1: Servidor Vence (Timestamp mais recente)
+
+1. **📱 App (Online):** Crie tarefa "Teste Conflito"
+2. **✈️ App:** Ative Modo Avião
+3. **📱 App (Offline):** Edite para "Teste Conflito - APP" (timestamp: 14:00:00)
+4. **💻 Postman:** Edite para "Teste Conflito - SERVIDOR" (timestamp: 14:05:00 - mais recente!)
+   ```bash
+   curl -X PUT http://localhost:3000/api/tasks/1 \
+     -H "Content-Type: application/json" \
+     -d '{
+       "id": 1,
+       "title": "Teste Conflito - SERVIDOR",
+       "lastModified": "2025-11-30T14:05:00.000Z"
+     }'
+   ```
+5. **🌐 App:** Desative Modo Avião
+6. **✅ Resultado:** Título fica "Teste Conflito - SERVIDOR" (versão do servidor prevalece)
+
+**Logs esperados:**
+```
+🔄 Conexão restaurada - iniciando sincronização...
+📋 1 operação(ões) na fila
+📤 UPDATE: Teste Conflito - APP
+⬇️ Servidor mais recente - atualizando local
+✅ Sincronização concluída: 1 sucesso(s), 0 erro(s)
+```
+
+#### Cenário 2: App Vence (Timestamp mais recente)
+
+1. **📱 App (Online):** Crie tarefa "Teste 2"
+2. **💻 Postman:** Edite para "Teste 2 - SERVIDOR" (timestamp: 14:00:00 - mais antigo)
+3. **✈️ App:** Ative Modo Avião
+4. **📱 App (Offline):** Edite para "Teste 2 - APP" (timestamp: 14:10:00 - mais recente!)
+5. **🌐 App:** Desative Modo Avião
+6. **✅ Resultado:** Título fica "Teste 2 - APP" (versão do app prevalece)
+
+**Logs esperados:**
+```
+📤 UPDATE: Teste 2 - APP
+⬆️ Local mais recente - atualizando servidor
+✅ Sincronização concluída: 1 sucesso(s), 0 erro(s)
+```
+
+### 📊 Logs do Servidor
+
+O servidor mostra logs detalhados de todas as operações:
+
+```
+╔════════════════════════════════════════════╗
+║  Backend Task Manager Offline-First        ║
+╚════════════════════════════════════════════╝
+
+✅ Servidor rodando em http://localhost:3000
+📱 Para Android Emulator: http://10.0.2.2:3000
+🌐 Para dispositivo físico: http://SEU_IP:3000
+
+Endpoints disponíveis:
+  GET    /api/health          - Health check
+  GET    /api/tasks           - Listar todas as tarefas
+  GET    /api/tasks/:id       - Buscar tarefa por ID
+  POST   /api/tasks           - Criar nova tarefa
+  PUT    /api/tasks/:id       - Atualizar tarefa
+  DELETE /api/tasks/:id       - Deletar tarefa
+
+⏳ Aguardando requisições...
+
+2025-11-30T14:00:00.000Z - POST /api/tasks
+➕ Tarefa criada: Minha Tarefa (ID: 1)
+
+2025-11-30T14:05:00.000Z - PUT /api/tasks/1
+✏️ Tarefa atualizada: Tarefa Editada (ID: 1)
+   lastModified: 2025-11-30T14:05:00.000Z
+
+2025-11-30T14:10:00.000Z - GET /api/tasks
+📋 Retornando 1 tarefa(s)
+```
+
+### ⚠️ Notas Importantes
+
+- ✅ Dados armazenados **em memória** (perdidos ao reiniciar)
+- ✅ Perfeito para **testes e demonstrações**
+- ✅ **Não requer** banco de dados
+- ❌ **Não usar** em produção real
+
+### 🐛 Troubleshooting do Backend
+
+#### Erro "Cannot find module 'express'"
+
+```bash
+npm install
+```
+
+#### App não conecta ao servidor
+
+**Verificações:**
+1. ✅ Servidor está rodando? (`npm start`)
+2. ✅ Health check funciona? (`curl http://localhost:3000/api/health`)
+3. ✅ Firewall permite porta 3000?
+4. ✅ App e PC na mesma WiFi? (para dispositivo físico)
+5. ✅ URL correta no `api_service.dart`?
+6. ✅ `testMode = false`?
+
+**Para Android Emulator:**
+- Use `http://10.0.2.2:3000` (não `localhost`)
+
+**Para Dispositivo Físico:**
+- Descubra seu IP local:
+  ```bash
+  # Windows
+  ipconfig
+  
+  # Mac/Linux
+  ifconfig
+  ```
+- Use `http://SEU_IP:3000`
+- Certifique-se de estar na mesma rede WiFi
+
+---
+
 ## ⚙️ Configuração de Modo
 
 ### 🧪 Modo Teste (Atual - Padrão)
@@ -666,7 +920,7 @@ ifconfig
 flutter run
 ```
 
-**Documentação completa:** Ver `BACKEND_SETUP.md`
+**Documentação completa:** Esta seção acima contém todas as informações necessárias para configurar e usar o backend.
 
 ---
 
