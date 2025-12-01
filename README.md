@@ -77,7 +77,7 @@ Aplicativo completo de gerenciamento de tarefas desenvolvido em Flutter com arqu
 
 ### 📳 Sensores
 - ✅ Detecção de shake (agitar o celular)
-- ✅ Completar tarefas rapidamente por shake
+- ✅ r tarefas rapidamente por shake
 - ✅ Feedback tátil (vibração)
 - ✅ Diálogo de seleção ao detectar shake
 
@@ -920,8 +920,11 @@ ifconfig
 flutter run
 ```
 
+<<<<<<< HEAD
 **Documentação completa:** Esta seção acima contém todas as informações necessárias para configurar e usar o backend.
 
+=======
+>>>>>>> 26a1214a77bdbf2c743ae8246b9daf6f28f6628b
 ---
 
 ## 🔧 Detalhes Técnicos
